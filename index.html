@@ -351,14 +351,12 @@ function dateInputVN(iso, onChange){
   let y = "", m = "", d = "";
   if(iso){ const p = iso.split("-"); y=p[0]||""; m=p[1]||""; d=p[2]||""; }
 
-  // Chỉ báo cho form biết (và vẽ lại) khi rời khỏi ô, hoặc khi năm đã đủ 4 số —
-  // KHÔNG báo trên từng ký tự gõ, để tránh vẽ lại form làm mất focus giữa chừng.
+  // Chỉ báo cho form biết (và vẽ lại) khi đã điền ĐỦ cả 3 ô Ngày/Tháng/Năm.
+  // Khi chưa đủ, không làm gì cả — tránh xóa mất dữ liệu đang gõ dở khi chuyển ô.
   function commit(){
     if(d && m && y && y.length===4){
       const dd = d.padStart(2,"0"), mm = m.padStart(2,"0");
       onChange(`${y}-${mm}-${dd}`);
-    } else {
-      onChange("");
     }
   }
   function numInput(val, ph, width, digits, onLocal){
@@ -369,9 +367,8 @@ function dateInputVN(iso, onChange){
     inp.addEventListener("input", ()=>{
       inp.value = inp.value.replace(/\D/g,"").slice(0,digits);
       onLocal(inp.value);
-      if(digits === 4 && inp.value.length === 4) commit(); // gõ xong năm -> tự cập nhật
+      commit(); // chỉ thực sự cập nhật form khi đủ 3 ô, còn lại bỏ qua an toàn
     });
-    inp.addEventListener("blur", commit); // rời ô -> cập nhật (kể cả khi chưa nhập đủ)
     return inp;
   }
   const dInp = numInput(d, "Ngày", "64px", 2, v=>{ d=v; });
