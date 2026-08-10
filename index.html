@@ -287,6 +287,71 @@ function datalistInput(value, onChange, listId, placeholder){
   inp.addEventListener("input", ()=> onChange(inp.value));
   return inp;
 }
+
+// Ô vừa gợi ý (gõ để lọc) vừa cho nhập tay tự do — dùng cho Nghề nghiệp, Nơi làm việc, Dân tộc, Đối tượng, Nguồn chi trả
+function makeTextAutocomplete({container, value, options, placeholder, onChange}) {
+  container.innerHTML = ""; container.className = "ac-wrap";
+  const input = document.createElement("input");
+  input.type = "text"; input.placeholder = placeholder || ""; input.autocomplete = "off";
+  input.value = value || "";
+  const list = document.createElement("div"); list.className = "ac-list";
+  container.appendChild(input); container.appendChild(list);
+  function renderList(query){
+    const qq = removeTones(query);
+    const opts = (!query ? options : options.filter(o=>removeTones(o).includes(qq))).slice(0,60);
+    list.innerHTML = "";
+    if(!opts.length){
+      const d = document.createElement("div"); d.className="ac-empty";
+      d.textContent = "Không có gợi ý — cứ nhập tay nội dung của bạn";
+      list.appendChild(d);
+    }
+    opts.forEach(o=>{
+      const d = document.createElement("div"); d.className="ac-item"; d.textContent=o;
+      d.onclick = ()=>{ input.value=o; onChange(o); list.classList.remove("open"); };
+      list.appendChild(d);
+    });
+    list.classList.add("open");
+  }
+  input.addEventListener("focus", ()=> renderList(input.value));
+  input.addEventListener("input", ()=>{ onChange(input.value); renderList(input.value); });
+  document.addEventListener("click", (e)=>{ if(!container.contains(e.target)) list.classList.remove("open"); });
+  return { setValue(v){ input.value=v||""; } };
+}
+
+// Ô nhập ngày kiểu Việt Nam (Ngày / Tháng / Năm tách riêng) — gõ trực tiếp, không cần lịch xoay
+function dateInputVN(iso, onChange){
+  const wrap = document.createElement("div");
+  wrap.style.display = "flex"; wrap.style.gap = "8px";
+  let y = "", m = "", d = "";
+  if(iso){ const p = iso.split("-"); y=p[0]||""; m=p[1]||""; d=p[2]||""; }
+
+  function emit(){
+    if(d && m && y && y.length===4){
+      const dd = d.padStart(2,"0"), mm = m.padStart(2,"0");
+      onChange(`${y}-${mm}-${dd}`);
+    } else {
+      onChange("");
+    }
+  }
+  function numInput(val, ph, max, width, digits){
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.inputMode = "numeric"; inp.placeholder = ph;
+    inp.maxLength = digits; inp.value = val;
+    inp.style.width = width; inp.style.textAlign = "center";
+    inp.addEventListener("input", ()=>{
+      inp.value = inp.value.replace(/\D/g,"").slice(0,digits);
+    });
+    return inp;
+  }
+  const dInp = numInput(d, "Ngày", 31, "64px", 2);
+  const mInp = numInput(m, "Tháng", 12, "64px", 2);
+  const yInp = numInput(y, "Năm sinh", 9999, "88px", 4);
+  dInp.addEventListener("input", ()=>{ d=dInp.value; emit(); });
+  mInp.addEventListener("input", ()=>{ m=mInp.value; emit(); });
+  yInp.addEventListener("input", ()=>{ y=yInp.value; emit(); });
+  wrap.appendChild(dInp); wrap.appendChild(mInp); wrap.appendChild(yInp);
+  return wrap;
+}
 </script>
 
 <script>
@@ -325,8 +390,8 @@ function render(){
     fGioi.body.appendChild(radios(state.gioiTinh, GENDERS, v=>{ state.gioiTinh=v; render(); }));
     r.appendChild(fGioi.div);
 
-    const fSinh = fieldWrap("ngaySinh","Ngày tháng năm sinh",true, state.ngaySinh ? `Tuổi: ${calcAge(state.ngaySinh)}` : undefined);
-    fSinh.body.appendChild(textInput(state.ngaySinh, v=>{ state.ngaySinh=v; render(); }, {type:"date"}));
+    const fSinh = fieldWrap("ngaySinh","Ngày tháng năm sinh",true, state.ngaySinh ? `Tuổi: ${calcAge(state.ngaySinh)}` : "Gõ trực tiếp Ngày / Tháng / Năm");
+    fSinh.body.appendChild(dateInputVN(state.ngaySinh, v=>{ state.ngaySinh=v; render(); }));
     r.appendChild(fSinh.div);
 
     const fSo = fieldWrap("soGiayTo","Số CCCD/Hộ chiếu/Mã định danh",true,"Nhập đúng 12 số nếu là CCCD");
@@ -336,7 +401,7 @@ function render(){
 
     const r2 = row3();
     const fCap = fieldWrap("capNgay","Cấp ngày",false);
-    fCap.body.appendChild(textInput(state.capNgay, v=>state.capNgay=v, {type:"date"}));
+    fCap.body.appendChild(dateInputVN(state.capNgay, v=>state.capNgay=v));
     r2.appendChild(fCap.div);
 
     const fNoiCap = fieldWrap("noiCap","Nơi cấp",false);
@@ -344,17 +409,20 @@ function render(){
     r2.appendChild(fNoiCap.div);
 
     const fDanToc = fieldWrap("danToc","Dân tộc",false);
-    fDanToc.body.appendChild(datalistInput(state.danToc, v=>state.danToc=v, "dl-ethnicities","Gõ để tìm dân tộc"));
+    { const c=document.createElement("div"); fDanToc.body.appendChild(c);
+      makeTextAutocomplete({container:c, value:state.danToc, options:ETHNICITIES.map(e=>e[1]), placeholder:"Gõ để tìm hoặc nhập tay dân tộc", onChange:v=>state.danToc=v}); }
     r2.appendChild(fDanToc.div);
     s1.appendChild(r2);
 
     const r3 = row2();
     const fDoiTuong = fieldWrap("doiTuong","Đối tượng",false,"VD: khám tuyển dụng, khám định kỳ, lái xe...");
-    fDoiTuong.body.appendChild(datalistInput(state.doiTuong, v=>state.doiTuong=v, "dl-subjects","Gõ hoặc chọn đối tượng"));
+    { const c=document.createElement("div"); fDoiTuong.body.appendChild(c);
+      makeTextAutocomplete({container:c, value:state.doiTuong, options:SUBJECTS.map(s=>s[1]), placeholder:"Gõ để tìm hoặc nhập tay đối tượng", onChange:v=>state.doiTuong=v}); }
     r3.appendChild(fDoiTuong.div);
 
     const fNguon = fieldWrap("nguonChiTra","Nguồn chi trả",false);
-    fNguon.body.appendChild(datalistInput(state.nguonChiTra, v=>state.nguonChiTra=v, "dl-payment","VD: BHYT, cơ quan chi trả..."));
+    { const c=document.createElement("div"); fNguon.body.appendChild(c);
+      makeTextAutocomplete({container:c, value:state.nguonChiTra, options:PAYMENT_SUGGESTIONS, placeholder:"VD: BHYT, cơ quan chi trả...", onChange:v=>state.nguonChiTra=v}); }
     r3.appendChild(fNguon.div);
     s1.appendChild(r3);
 
@@ -402,11 +470,13 @@ function render(){
     }).setValue(state.phuongXa);
 
     const fNghe = fieldWrap("ngheNghiep","Nghề nghiệp",false,"Gõ để tìm hoặc nhập tay");
-    fNghe.body.appendChild(datalistInput(state.ngheNghiep, v=>state.ngheNghiep=v, "dl-jobs","Tìm hoặc nhập nghề nghiệp..."));
+    { const c=document.createElement("div"); fNghe.body.appendChild(c);
+      makeTextAutocomplete({container:c, value:state.ngheNghiep, options:JOBS.map(j=>j[0]), placeholder:"Tìm hoặc nhập tay nghề nghiệp...", onChange:v=>state.ngheNghiep=v}); }
     s2.appendChild(fNghe.div);
 
     const fNoi = fieldWrap("noiLamViec","Nơi làm việc, học tập",false,"Gõ để tìm hoặc nhập tay");
-    fNoi.body.appendChild(datalistInput(state.noiLamViec, v=>state.noiLamViec=v, "dl-workplaces","Tìm hoặc nhập tay nơi làm việc/học tập..."));
+    { const c=document.createElement("div"); fNoi.body.appendChild(c);
+      makeTextAutocomplete({container:c, value:state.noiLamViec, options:WORKPLACES.map(w=>w[0]), placeholder:"Tìm hoặc nhập tay nơi làm việc/học tập...", onChange:v=>state.noiLamViec=v}); }
     s2.appendChild(fNoi.div);
 
     const fLy = fieldWrap("lyDoKham","Lý do khám sức khỏe",false);
